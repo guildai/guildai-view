@@ -3,6 +3,7 @@ import React from 'react';
 import { useColorScheme } from '@mui/joy';
 
 import numeral from 'numeral';
+import * as d3 from 'd3';
 
 import { RunCompareData, RunScalar, RunsCompare } from './types';
 
@@ -78,7 +79,11 @@ function elementViewport(e: HTMLElement): HTMLElement | null {
     return null;
   }
   const style = getComputedStyle(parent);
-  if (style.overflowX === 'auto' || style.overflowY === 'auto') {
+  if (
+    style.overflowX === 'auto' ||
+    style.overflowY === 'auto' ||
+    style.overflow === 'auto'
+  ) {
     return parent;
   }
   return elementViewport(parent);
@@ -164,16 +169,14 @@ export function dispatchKeyDownEvent(
   window.dispatchEvent(event);
 }
 
+export function clearActiveFocus() {
+  if (document.activeElement && (document.activeElement as HTMLElement).blur) {
+    (document.activeElement as HTMLElement).blur();
+  }
+}
+
 export function useEscToClearFocus() {
-  const clearFocus = () => {
-    if (
-      document.activeElement &&
-      (document.activeElement as HTMLElement).blur
-    ) {
-      (document.activeElement as HTMLElement).blur();
-    }
-  };
-  useKeyDownListener([[e => isKey(e, { key: 'Escape' }), clearFocus]]);
+  useKeyDownListener([[e => isKey(e, { key: 'Escape' }), clearActiveFocus]]);
 }
 
 export function disableShiftSelect(e: React.MouseEvent) {
@@ -182,7 +185,10 @@ export function disableShiftSelect(e: React.MouseEvent) {
   }
 }
 
-export function formatScalar(val: number): string {
+export function formatScalar(val: number | undefined): string {
+  if (val === undefined) {
+    return '';
+  }
   const fmt =
     val >= 1000
       ? '0,000'
@@ -247,6 +253,8 @@ export function formatFlagValue(val: any) {
   }
 }
 
+export const formatAttribute = formatFlagValue;
+
 export function useDarkTheme(): boolean {
   const { mode, systemMode } = useColorScheme();
   return mode === 'dark' || (mode === 'system' && systemMode === 'dark');
@@ -254,6 +262,10 @@ export function useDarkTheme(): boolean {
 
 export function runsCompareFlagNames(compare: RunsCompare): string[] {
   return runsCompareNames(compare, data => data.flags);
+}
+
+export function runsCompareAttributeNames(compare: RunsCompare): string[] {
+  return runsCompareNames(compare, data => data.attributes);
 }
 
 export function runsCompareScalarNames(compare: RunsCompare): string[] {
@@ -282,33 +294,25 @@ export function removeDuplicates(a: any[]) {
   });
 }
 
-export function useDimensions(ref: React.RefObject<HTMLElement>): {
-  width: number;
-  height: number;
-} {
-  const getDimensions = React.useCallback(() => {
-    return {
-      width: ref.current ? ref.current.offsetWidth : 0,
-      height: ref.current ? ref.current.offsetHeight : 0
-    };
-  }, [ref]);
-
-  const [dimensions, setDimensions] = React.useState(getDimensions);
-
-  const handleResize = React.useCallback(() => {
-    setDimensions(getDimensions());
-  }, [getDimensions]);
+export function useRect(
+  ref: React.RefObject<HTMLElement>
+): DOMRectReadOnly | null {
+  const [val, set] = React.useState<DOMRectReadOnly | null>(null);
 
   React.useEffect(() => {
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [handleResize]);
+    const observer = new ResizeObserver(entries => {
+      assert(entries.length <= 1);
+      set(entries.length ? entries[0].contentRect : null);
+    });
 
-  React.useLayoutEffect(() => {
-    handleResize();
-  }, [handleResize]);
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
 
-  return dimensions;
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return val;
 }
 
 export type ToggleState<T> = [
@@ -351,9 +355,43 @@ export function cmp(a: any, b: any, desc?: boolean): number {
 }
 
 export function cmpNat(a: string, b: string) {
-  return a.localeCompare(b, undefined, {numeric: true});
+  return a.localeCompare(b, undefined, { numeric: true });
 }
 
 export function range(n: number): number[] {
   return Object.keys([...Array(n)]).map(key => Number(key));
+}
+
+export function brightenColor(color: string, factor?: number) {
+  const c = d3.color(color);
+  return c ? c.brighter(factor).toString() : color;
+}
+
+export function darkenColor(color: string, factor?: number) {
+  const c = d3.color(color);
+  return c ? c.darker(factor).toString() : color;
+}
+
+export function flatten<T>(l: T[][]): T[] {
+  return Array.prototype.concat(...l);
+}
+
+export function values<T = any>(a: { [key: string]: T }): T[] {
+  return Object.keys(a).map(key => a[key]);
+}
+
+export function items<T = any>(a: { [key: string]: T }): [string, T][] {
+  return Object.keys(a).map(key => [key, a[key]]);
+}
+
+export function setKey<T>(o: { [key: string]: T }, key: string, val: T) {
+  return { ...o, [key]: val };
+}
+
+export function dropKey(o: { [key: string]: any }, key: string) {
+  return Object.fromEntries(
+    Object.keys(o)
+      .filter(oKey => oKey != key)
+      .map(oKey => [oKey, o[oKey]])
+  );
 }

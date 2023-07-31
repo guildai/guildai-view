@@ -129,7 +129,7 @@ function FileRow({ file, expanded, onToggleExpand, onRunClick }: FileRowProps) {
           />
           <FileTypeIcon file={file} />
           <Tooltip title={file.name}>
-          <Typography noWrap>{file.name}</Typography>
+            <Typography noWrap>{file.name}</Typography>
           </Tooltip>
         </Stack>
       </td>
@@ -206,7 +206,7 @@ function FilesTable({ run, fileTypes, onRunClick }: FilesTableProps) {
 
   useRefreshListener(refresh);
 
-  const files = filterFiles(tableFiles(nestedFiles || [], state), fileTypes);
+  const files = tableFiles(filterFiles(nestedFiles || [], fileTypes), state);
 
   return (
     <Table hoverRow stickyHeader>
@@ -235,11 +235,21 @@ function FilesTable({ run, fileTypes, onRunClick }: FilesTableProps) {
   );
 }
 
-function filterFiles(files: TableFile[], types: FileType[]): TableFile[] {
-  if (!types.length) {
+function filterFiles(files: RunFile[], types: FileType[]): RunFile[] {
+  if (types.length === 0) {
     return files;
   }
-  return files.filter(f => f.mType && types.includes(f.mType as FileType));
+
+  const match = (f: RunFile) =>
+    f.mType && types.includes(f.mType as FileType);
+
+  const filterDir = (d: RunFile, filtered: RunFile[]) =>
+    filtered.length > 0 ? [{ ...d, files: filtered }] : [];
+
+  const filter = (f: RunFile) =>
+    f.isDir ? filterDir(f, filterFiles(f.files!, types)) : match(f) ? [f] : [];
+
+  return files.reduce<RunFile[]>((acc, f) => [...acc, ...filter(f)], []);
 }
 
 function tableFiles(nested: RunFile[], state: TableState): TableFile[] {

@@ -17,6 +17,7 @@ import { useMainView } from './mainView';
 
 import {
   useHoverOrCurrentRun,
+  useRunAttributes,
   useRunComments,
   useRunFlags,
   useRunProcessInfo,
@@ -37,7 +38,7 @@ import {
   useRefreshListener
 } from './utils';
 
-import { Run, RunFlags, RunScalars } from './types';
+import { Run, RunAttributes, RunFlags, RunScalars } from './types';
 
 type RunPanelProps = {
   run: Run | undefined;
@@ -57,12 +58,12 @@ function Metadata({ run, sx }: RunPanelProps) {
     <Panel title="Metadata" sx={sx}>
       <NameValueTable
         items={[
+          ['ID', run ? run.id : ''],
           ['Operation', run ? <RunOperationLabel run={run} /> : ''],
           ['Status', run ? run.status : ''],
           ['Started', run ? formatRunDate(run.started) : ''],
           ['Stopped', run ? formatRunDate(run.stopped) : ''],
           ['Duration', run ? formatRunDuration(run.started, run.stopped) : ''],
-          ['ID', run ? run.id : ''],
           ['Location', run ? run.dir : ''],
           ['Source Code', run ? run.sourceCodeDigest : ''],
           [
@@ -102,7 +103,9 @@ function maybeQuote(s: string) {
 }
 
 function Flags({ run, sx }: RunPanelProps) {
-  const flags = useRunFlags(run);
+  const [flags, refresh] = useRunFlags(run);
+
+  useRefreshListener(refresh);
 
   return (
     <Panel title="Flags" sx={sx}>
@@ -159,6 +162,31 @@ function formatScalars(scalars: RunScalars): [string, string][] {
   return Object.keys(scalars)
     .sort(cmpNat)
     .map(tag => [tag, formatScalarLastVal(scalars[tag])]);
+}
+
+function Attributes({ run, sx }: RunPanelProps) {
+  const [attrs, refresh] = useRunAttributes(run);
+
+  useRefreshListener(refresh);
+
+  return (
+    <Panel title="Attributes" sx={sx}>
+      {(attrs && Object.keys(attrs).length && (
+        <NameValueTable items={formatAttributes(attrs)} />
+      )) ||
+        (attrs && <Empty>No attributes</Empty>)}
+    </Panel>
+  );
+}
+
+function formatAttributes(
+  attrs: RunAttributes | undefined
+): [string, string | React.ReactNode][] {
+  if (!attrs) {
+    return [];
+  }
+  const sortedKeys = Object.keys(attrs).sort(cmpNat);
+  return sortedKeys.map(key => [key, attrs[key]]);
 }
 
 type CommentProps = {
@@ -279,6 +307,7 @@ export default function RunSidebar() {
         <Metadata run={run} sx={{ mt: '-4px' }} />
         <Flags run={run} />
         <Scalars run={run} />
+        <Attributes run={run} />
         <Comments run={run} />
         <ProcessInfo run={run} />
       </Stack>

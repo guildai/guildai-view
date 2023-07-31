@@ -5,16 +5,26 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import { useRunsCompare, useSort } from './runs';
 
 import { RunSort, RunsCompare } from './types';
-import { assert, runsCompareFlagNames, runsCompareScalarNames } from './utils';
+import {
+  assert,
+  runsCompareAttributeNames,
+  runsCompareFlagNames,
+  runsCompareScalarNames
+} from './utils';
 
 type SortOpt = RunSort & {
   label: string;
   toggle?: boolean;
 };
 
-function useOpts(): [SortOpt[], SortOpt[], SortOpt[]] {
-  const compare = useRunsCompare();
-  return [coreOpts(), flagOpts(compare || {}), scalarOpts(compare || {})];
+function useOpts(): [SortOpt[], SortOpt[], SortOpt[], SortOpt[]] {
+  const compare = useRunsCompare() || {};
+  return [
+    coreOpts(),
+    flagOpts(compare),
+    scalarOpts(compare),
+    attributeOpts(compare)
+  ];
 }
 
 function coreOpts(): SortOpt[] {
@@ -106,6 +116,31 @@ function scalarOpts(compare: RunsCompare) {
     );
 }
 
+function attributeOpts(compare: RunsCompare): SortOpt[] {
+  return runsCompareAttributeNames(compare)
+    .sort()
+    .reduce<SortOpt[]>(
+      (acc, name) => [
+        ...acc,
+        {
+          label: name,
+          type: 'attr',
+          name: name,
+          desc: true,
+          toggle: true
+        },
+        {
+          label: name,
+          type: 'attr',
+          name: name,
+          desc: false,
+          toggle: true
+        }
+      ],
+      []
+    );
+}
+
 function genOpt(
   opt: SortOpt,
   opts: SortOpt[],
@@ -131,43 +166,6 @@ function genOpt(
         />
       </Option>
     )
-  );
-}
-
-export default function RunSortSelect() {
-  const [sort, setSort] = useSort();
-  const [coreOpts, flagOpts, scalarOpts] = useOpts();
-
-  return (
-    <Tooltip title="Sort runs">
-      <Select
-        size="sm"
-        sx={{ minWidth: '8em' }}
-        value={optForSort(sort, [...coreOpts, ...flagOpts, ...scalarOpts])}
-      >
-        {coreOpts.map(opt => genOpt(opt, coreOpts, sort, setSort))}
-        {scalarOpts.length > 0 && (
-          <List>
-            <ListItem sticky>
-              <Typography level="body3" textTransform="uppercase">
-                Scalars
-              </Typography>
-            </ListItem>
-            {scalarOpts.map(opt => genOpt(opt, scalarOpts, sort, setSort))}
-          </List>
-        )}
-        {flagOpts.length > 0 && (
-          <List>
-            <ListItem sticky>
-              <Typography level="body3" textTransform="uppercase">
-                Flags
-              </Typography>
-            </ListItem>
-            {flagOpts.map(opt => genOpt(opt, flagOpts, sort, setSort))}
-          </List>
-        )}
-      </Select>
-    </Tooltip>
   );
 }
 
@@ -207,4 +205,58 @@ function handleSort(opt: SortOpt, setSort: (arg0: RunSort) => void) {
   } else {
     setSort(opt);
   }
+}
+
+export default function RunSortSelect() {
+  const [sort, setSort] = useSort();
+  const [coreOpts, flagOpts, scalarOpts, attributeOpts] = useOpts();
+
+  return (
+    <Tooltip title="Sort runs">
+      <Select
+        size="sm"
+        sx={{ minWidth: '8em' }}
+        value={optForSort(sort, [
+          ...coreOpts,
+          ...flagOpts,
+          ...scalarOpts,
+          ...attributeOpts
+        ])}
+      >
+        {coreOpts.map(opt => genOpt(opt, coreOpts, sort, setSort))}
+        {scalarOpts.length > 0 && (
+          <List>
+            <ListItem sticky>
+              <Typography level="body3" textTransform="uppercase">
+                Scalars
+              </Typography>
+            </ListItem>
+            {scalarOpts.map(opt => genOpt(opt, scalarOpts, sort, setSort))}
+          </List>
+        )}
+        {flagOpts.length > 0 && (
+          <List>
+            <ListItem sticky>
+              <Typography level="body3" textTransform="uppercase">
+                Flags
+              </Typography>
+            </ListItem>
+            {flagOpts.map(opt => genOpt(opt, flagOpts, sort, setSort))}
+          </List>
+        )}
+        {attributeOpts.length > 0 && (
+          <List>
+            <ListItem sticky>
+              <Typography level="body3" textTransform="uppercase">
+                Attributes
+              </Typography>
+            </ListItem>
+            {attributeOpts.map(opt =>
+              genOpt(opt, attributeOpts, sort, setSort)
+            )}
+          </List>
+        )}
+      </Select>
+    </Tooltip>
+  );
 }

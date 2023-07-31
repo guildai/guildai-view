@@ -7,7 +7,7 @@ import { defaultMainView } from './prefs';
 import { RunsSource, useRunsSource } from './runs';
 import { useSetCompareMode } from './selection';
 
-import { isKey, useKeyDownListener } from './utils';
+import { assert, isKey, useKeyDownListener } from './utils';
 
 import { ReactState } from './types';
 
@@ -49,7 +49,7 @@ export function filterViewForSource(
   view: MainViewName,
   source: RunsSource
 ): boolean {
-  if (['local', 'local-archive'].includes(source.type)) {
+  if (['local'].includes(source.type)) {
     return true;
   } else {
     return ['grid', 'table', 'run'].includes(view);
@@ -60,6 +60,7 @@ export function useAppInit() {
   useKeyboardBindings();
   useDeletedRunsGridViewSync();
   useCompareModeSync();
+  useMainViewForSourceSync();
 }
 
 function useKeyboardBindings() {
@@ -92,6 +93,18 @@ function useCompareModeSync() {
   React.useEffect(() => {
     setCompareMode(view === 'compare');
   }, [view, setCompareMode]);
+}
+
+function useMainViewForSourceSync() {
+  const [source] = useRunsSource();
+  const [view, setView] = useMainView();
+
+  React.useEffect(() => {
+    if (!filterViewForSource(view, source)) {
+      assert(filterViewForSource('grid', source), [source]);
+      setView('grid');
+    }
+  }, [source, view, setView]);
 }
 
 export const reducer = slice.reducer;

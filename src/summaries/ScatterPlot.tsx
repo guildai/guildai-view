@@ -1,128 +1,276 @@
-// import { Stack } from '@mui/joy';
+import React from 'react';
 
-// import { EChartsOption, ReactECharts } from '../components/ReactECharts';
-// import Panel from '../components/Panel';
+import { Box, Grid, Stack } from '@mui/joy';
 
-// import { useScalarNames } from '../summaries';
+import * as d3 from 'd3';
 
-// import { useSetCurrent } from '../selection';
-// import { useHover } from '../highlight';
+import Panel from '../components/Panel';
 
-// import { isNumber } from '../utils';
+import {
+  seriesColorForRun,
+  useSummariesCompare,
+  numericTickFormat,
+  paddedExtent
+} from '../summaries';
 
-// import { RunCompareData, RunsCompare } from '../types';
+import { cmpNat, isNumber, items, useRect, values } from '../utils';
 
-// type RunValReader = (run: RunCompareData) => number;
+import { RunCompareData, RunsCompare } from '../types';
 
-// type ScalarToFlagPlotProps = {
-//   scalar: string;
-//   flag: string;
-//   compare: RunsCompare;
-// };
+type YReader = (arg0: RunCompareData) => any;
 
-// function ScalarToFlagPlot({ scalar, flag, compare }: ScalarToFlagPlotProps) {
-//   const setCurrent = useSetCurrent();
-//   const [, setHover] = useHover();
+type PlotVal = [string, number, number];
 
-//   const option: EChartsOption = {
-//     animation: false,
-//     xAxis: {},
-//     yAxis: { name: flag },
-//     tooltip: {
-//       trigger: 'item',
-//       formatter: (params: any) =>
-//         `${params.value[2]}<br>
-//         ${flag}: ${params.value[0]}<br>
-//         ${scalar}: ${params.value[1]}`
-//     },
-//     series: [
-//       {
-//         symbolSize: 5,
-//         data: runPairs(
-//           compare,
-//           (run: RunCompareData) => run.flags[flag],
-//           (run: RunCompareData) => run.scalars[scalar]?.lastVal
-//         ),
-//         type: 'scatter'
-//       }
-//     ]
-//   };
+type XScale = d3.ScaleLinear<number, number>;
 
-//   const handleClick = (params: any) => {
-//     const runId = params.value[2];
-//     setCurrent(runId);
-//   };
+type XAxisProps = {
+  scale: XScale;
+  height: number;
+  vals: PlotVal[];
+};
 
-//   const handleMouseOver = (params: any) => {
-//     const runId = params.value[2];
-//     setHover(runId);
-//   };
+function XAxis({ scale, height, vals }: XAxisProps) {
+  const ref = React.useRef(null);
 
-//   const handleMouseOut = (params: any) => {
-//     setHover(null);
-//   };
+  React.useEffect(() => {
+    const root = d3.select(ref.current);
+    root.selectAll('*').remove();
+    root
+      .append('g')
+      .attr('transform', `translate(0, ${height})`)
+      .call(
+        d3
+          .axisBottom(scale)
+          .ticks(5)
+          .tickFormat(numericTickFormat(vals.map(d => d[1]))!)
+      );
+  }, [ref, scale, height, vals]);
 
-//   return (
-//     <ReactECharts
-//       option={option}
-//       style={{ height: '300px', width: '300px' }}
-//       onClick={handleClick}
-//       onMouseOver={handleMouseOver}
-//       onMouseOut={handleMouseOut}
-//     />
-//   );
-// }
+  return <g ref={ref} />;
+}
 
-// type ScalarPlotsProps = {
-//   scalar: string;
-//   compare: RunsCompare;
-// };
+type YScale = d3.AxisScale<d3.NumberValue>;
 
-// function ScalarPlots({ scalar, compare }: ScalarPlotsProps) {
-//   return (
-//     <Stack direction="row">
-//       {numericFlags(compare).map(flag => (
-//         <ScalarToFlagPlot key={flag} scalar={scalar} flag={flag} compare={compare} />
-//       ))}
-//     </Stack>
-//   );
-// }
+type YAxisProps = {
+  scale: YScale;
+  vals: PlotVal[];
+};
 
-// function numericFlags(compare: RunsCompare): string[] {
-//   const flags = new Set<string>();
-//   Object.keys(compare).forEach(runId => {
-//     Object.keys(compare[runId].flags).forEach(flagName => {
-//       if (isNumber(compare[runId].flags[flagName])) {
-//         flags.add(flagName);
-//       }
-//     });
-//   });
-//   return Array.from(flags).sort();
-// }
+function YAxis({ scale, vals }: YAxisProps) {
+  const ref = React.useRef(null);
 
-// export default function ScatterPlot() {
-//   const compare = useSummariesCompare() || {};
+  React.useEffect(() => {
+    const root = d3.select(ref.current);
+    root.selectAll('*').remove();
+    root.append('g').call(
+      d3
+        .axisLeft(scale)
+        .ticks(5)
+        .tickFormat(numericTickFormat(vals.map(d => d[2]))!)
+    );
+  }, [ref, scale, vals]);
 
-//   return (
-//     <Stack>
-//       {scalarsForCompare(compare).map(s => (
-//         <Panel key={s} title={s} headerStyle="plain">
-//           <ScalarPlots scalar={s} compare={compare} />
-//         </Panel>
-//       ))}
-//     </Stack>
-//   );
-// }
+  return <g ref={ref}></g>;
+}
 
-// function runPairs(compare: RunsCompare, f1: RunValReader, f2: RunValReader) {
-//   return Object.keys(compare)
-//     .sort()
-//     .map(runId => {
-//       const run = compare[runId];
-//       return [f1(run), f2(run), runId];
-//     });
-// }
+type PlotPointProps = {
+  val: PlotVal;
+  xScale: XScale;
+  yScale: YScale;
+};
+
+function PlotPoint({ val, xScale, yScale }: PlotPointProps) {
+  const [runId, x, y] = val;
+  return (
+    <circle
+      cx={xScale(x)}
+      cy={yScale(y)}
+      r={3}
+      fill={seriesColorForRun(runId)}
+      opacity={0.5}
+    />
+  );
+}
+
+function scatterPlotVals(
+  compare: RunsCompare,
+  yReader: YReader,
+  scalar: string
+): PlotVal[] {
+  return items(compare)
+    .map(
+      ([runId, data]: [string, RunCompareData]) =>
+        [runId, data.scalars[scalar]?.lastVal, yReader(data)] as [
+          string,
+          any,
+          any
+        ]
+    )
+    .filter(
+      ([runId, scalarVal, yVal]) => isNumber(yVal) && isNumber(scalarVal)
+    );
+}
+
+function initXScale(vals: PlotVal[], width: number) {
+  const [min, max] = paddedExtent(vals.map(d => d[1]));
+  return d3.scaleLinear().domain([min, max]).range([0, width]).nice();
+}
+
+function initYScale(vals: PlotVal[], height: number) {
+  const [min, max] = paddedExtent(vals.map(d => d[2]));
+  return d3.scaleLinear().domain([min!, max!]).range([height, 0]).nice();
+}
+
+type ScalarScatterPlotProps = {
+  scalar: string;
+  yReader: YReader;
+  compare: RunsCompare;
+};
+
+function ScalarScatterPlot({
+  scalar,
+  yReader,
+  compare
+}: ScalarScatterPlotProps) {
+  const vals = scatterPlotVals(compare, yReader, scalar);
+
+  const rootRef = React.useRef(null);
+
+  const dim = useRect(rootRef);
+
+  const width = dim?.width || 240;
+  const height = 240;
+
+  const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+
+  const boundsWidth = width - margin.right - margin.left;
+  const boundsHeight = height - margin.top - margin.bottom;
+
+  const xScale = initXScale(vals, boundsWidth);
+  const yScale = initYScale(vals, boundsHeight);
+
+  return (
+    <Box ref={rootRef}>
+      <svg width={width} height={height}>
+        <g
+          width={boundsWidth}
+          height={boundsHeight}
+          transform={`translate(${[margin.left, margin.top].join(',')})`}
+        >
+          <XAxis scale={xScale} height={boundsHeight} vals={vals} />
+          <text
+            fill="var(--joy-palette-text-secondary)"
+            textAnchor="end"
+            fontSize="var(--joy-fontSize-xs)"
+            x={width / 2}
+            y={height - margin.top}
+          >
+            {scalar}
+          </text>
+          <YAxis scale={yScale} vals={vals} />
+          {vals.map(val => (
+            <PlotPoint val={val} xScale={xScale} yScale={yScale} />
+          ))}
+        </g>
+      </svg>
+    </Box>
+  );
+}
+
+type ScatterPlotRowProps = {
+  title: string;
+  compare: RunsCompare;
+  yReader: YReader;
+  scalars: string[];
+};
+
+function ScatterPlotRow({
+  title,
+  compare,
+  yReader,
+  scalars
+}: ScatterPlotRowProps) {
+  return (
+    <Panel title={title}>
+      <Grid container spacing={2} sx={{ flexGrow: 1 }}>
+        {scalars.map(s => (
+          <Grid key={s} sm={4}>
+            <ScalarScatterPlot scalar={s} yReader={yReader} compare={compare} />
+          </Grid>
+        ))}
+      </Grid>
+    </Panel>
+  );
+}
+
+function accCompareNames(
+  acc: [Set<string>, Set<string>, Set<string>],
+  data: RunCompareData
+) {
+  const [flags, attributes, scalars] = acc;
+  Object.keys(data.flags).forEach(key => flags.add(key));
+  Object.keys(data.attributes).forEach(key => attributes.add(key));
+  Object.keys(data.scalars).forEach(key => scalars.add(key));
+  return acc;
+}
+
+function numericCompareRows(
+  compare: RunsCompare
+): [string[], string[], string[]] {
+  const runsData = values(compare);
+  const [flags, attributes, scalars] = runsData.reduce(accCompareNames, [
+    new Set<string>(),
+    new Set<string>(),
+    new Set<string>()
+  ]);
+
+  const numericFlag = (name: string) =>
+    runsData.some(data => isNumber(data.flags[name]));
+
+  const numericAttribute = (name: string) =>
+    runsData.some(data => isNumber(data.attributes[name]));
+
+  return [
+    [...flags].filter(numericFlag).sort(cmpNat),
+    [...attributes].filter(numericAttribute).sort(cmpNat),
+    [...scalars].sort(cmpNat)
+  ];
+}
 
 export default function ScatterPlot() {
-  return <>TODO - scatter plot</>;
+  const compare = useSummariesCompare() || {};
+
+  const [flags, attributes, scalars] = numericCompareRows(compare);
+
+  return (
+    <Stack>
+      {flags.map(name => (
+        <ScatterPlotRow
+          key={name}
+          title={name}
+          compare={compare}
+          yReader={data => data.flags[name]}
+          scalars={scalars}
+        />
+      ))}
+      {attributes.map(name => (
+        <ScatterPlotRow
+          key={name}
+          title={name}
+          compare={compare}
+          yReader={data => data.attributes[name]}
+          scalars={scalars}
+        />
+      ))}
+      {scalars.map(name => (
+        <ScatterPlotRow
+          key={name}
+          title={name}
+          compare={compare}
+          yReader={data => data.scalars[name]?.lastVal}
+          scalars={scalars}
+        />
+      ))}
+    </Stack>
+  );
 }

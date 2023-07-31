@@ -1,3 +1,5 @@
+import React from 'react';
+
 import numeral from 'numeral';
 
 import { Chip, Stack, Table, Typography } from '@mui/joy';
@@ -7,7 +9,7 @@ import { SxProps } from '@mui/joy/styles/types';
 import Tooltip from './components/Tooltip';
 
 import { ImageFeature, ScalarFeature } from './features';
-import { formatScalar, range } from './utils';
+import { assert, formatScalar, range, useRect } from './utils';
 
 type ScalarFeatureProps = {
   scalar: ScalarFeature;
@@ -29,10 +31,39 @@ function ScalarValue({ scalar, sx }: ScalarFeatureProps) {
   );
 }
 
+function useScalarTagEllipsisPadding(ref: React.RefObject<HTMLElement>) {
+  /* Reduces scalar tag padding when text is truncated to allow for more chars
+   * to render at right.
+   */
+  const dim = useRect(ref);
+
+  React.useEffect(() => {
+    const root = ref.current as HTMLElement | null;
+    if (root) {
+      const p = root.getElementsByTagName('p')[0];
+      assert(p);
+      // Calc of truncate state must accommodate the pixel difference in width
+      // to avoid loops - in this case the width difference is 4px (2px on each
+      // side)
+      const truncated = () => p.offsetWidth < p.scrollWidth - 4;
+      if (truncated()) {
+        root.style.paddingInline = '4px 2px';
+      } else {
+        root.style.paddingInline = '4px';
+      }
+    }
+  }, [ref, dim]);
+}
+
 function ScalarTag({ scalar, sx }: ScalarFeatureProps) {
+  const ref = React.useRef(null);
+
+  useScalarTagEllipsisPadding(ref);
+
   return (
     <Tooltip title={scalar.tag} placement="top-start">
       <Chip
+        ref={ref}
         size="sm"
         variant="outlined"
         color="neutral"
@@ -40,12 +71,12 @@ function ScalarTag({ scalar, sx }: ScalarFeatureProps) {
           bgcolor: 'var(--joy-palette-background-level1)',
           overflow: 'hidden',
           '--Chip-minHeight': '12px',
-          '--Chip-radius': '6px',
+          '--Chip-radius': '4px',
           '--Chip-paddingInline': '4px',
           ...sx
         }}
       >
-        <Typography level="body4" noWrap fontSize="xs2">
+        <Typography textColor="text.tertiary" fontSize="xs2" noWrap>
           {scalar.tag}
         </Typography>
       </Chip>

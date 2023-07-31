@@ -21,8 +21,6 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps) {
     <div style={{ display: 'flex' }}>
       <RadioGroup
         orientation="horizontal"
-        aria-label="Alignment"
-        name="view"
         variant="outlined"
         value={props.value}
         overlay
@@ -66,7 +64,6 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps) {
                   },
                   label: { sx: { lineHeight: 0 } }
                 }}
-                onClick={e => (e.target as HTMLElement).blur()}
               />
             </Tooltip>
           </Box>

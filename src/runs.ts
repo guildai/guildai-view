@@ -15,11 +15,11 @@ import { useHover } from './highlight';
 
 import {
   archivesApi,
-  collectionsApi,
   diffApi,
   operationsApi,
   OpName,
   runApi,
+  runAttributesApi,
   runCommentsApi,
   runFileApi,
   runFilesApi,
@@ -50,8 +50,10 @@ import {
   ReactState,
   Refresh,
   Run,
+  RunAttributes,
   RunComment,
   RunFile,
+  RunFlags,
   RunProcessInfo,
   RunScalars,
   RunSort,
@@ -155,15 +157,6 @@ export function useCollection(): ReactState<Collection | null> {
     dispatch(slice.actions.setCollection(collection));
   };
   return [val, set];
-}
-
-export function useCollections(): [Collection[] | undefined, Refresh] {
-  const { collections } = collectionsApi.useQuery(undefined, {
-    selectFromResult: ({ data }) => ({ collections: data })
-  });
-  const { refetch } = collectionsApi.useQuerySubscription(undefined);
-
-  return [collections, refetch];
 }
 
 export function useArchives(): [Archive[] | undefined, Refresh] {
@@ -318,8 +311,8 @@ function compareRunFn(sort: RunSort, data: RunsCompare) {
     } else {
       return (a: Run, b: Run) =>
         genCmp(
-          attrForSort(a, sort.name),
-          attrForSort(b, sort.name),
+          attrForSort(a, sort.name, data),
+          attrForSort(b, sort.name, data),
           sort.desc
         ) || cmpLatest(a, b);
     }
@@ -342,7 +335,7 @@ function compareRunFn(sort: RunSort, data: RunsCompare) {
   }
 }
 
-function attrForSort(run: Run, name: string): any {
+function attrForSort(run: Run, name: string, data: RunsCompare): any {
   if (name === 'status') {
     return statusRank(run.status);
   } else if (name === 'duration') {
@@ -350,7 +343,7 @@ function attrForSort(run: Run, name: string): any {
   } else if (name === 'started' || name === 'operation' || name === 'label') {
     return run[name];
   } else {
-    assertFailed(name);
+    return data[run.id]?.attributes[name];
   }
 }
 
@@ -424,13 +417,19 @@ function useFilteredSelectionSync() {
   }, [filtered, selected, deselect]);
 }
 
-export function useRunFlags(run: Run | undefined) {
+export function useRunFlags(
+  run: Run | undefined
+): [RunFlags | undefined, Refresh] {
   const runId = run ? run.id : 'unused';
   const { flags } = runFlagsApi.useQuery(runId, {
     selectFromResult: ({ data }) => ({ flags: data }),
     skip: !run
   });
-  return run ? flags : undefined;
+  const { refetch } = runFlagsApi.useQuerySubscription(
+    run ? run.id : 'unused',
+    { skip: !run }
+  );
+  return run ? [flags, refetch] : [undefined, () => {}];
 }
 
 export function runStatusLabel(status: string): string {
@@ -465,6 +464,21 @@ export function useRunScalars(
     { skip: !run }
   );
   return run ? [scalars, refetch] : [undefined, () => {}];
+}
+
+export function useRunAttributes(
+  run: Run | undefined
+): [RunAttributes | undefined, Refresh] {
+  const runId = run ? run.id : 'unused';
+  const { attributes } = runAttributesApi.useQuery(runId, {
+    selectFromResult: ({ data }) => ({ attributes: data }),
+    skip: !run
+  });
+  const { refetch } = runAttributesApi.useQuerySubscription(
+    run ? run.id : 'unused',
+    { skip: !run }
+  );
+  return run ? [attributes, refetch] : [undefined, () => {}];
 }
 
 export function useRunFiles(

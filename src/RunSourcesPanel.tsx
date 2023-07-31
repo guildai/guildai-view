@@ -23,7 +23,7 @@ import { useRefreshListener, useToggleState } from './utils';
 type SourceListItemProps = {
   label: string;
   icon: React.ReactNode;
-  help?: string;
+  help?: React.ReactNode;
   selected?: boolean;
   onClick?: React.MouseEventHandler;
 };
@@ -90,7 +90,7 @@ export default function RunSourcePanel() {
             selected={source.type === 'local-deleted'}
             onClick={() => setSource({ type: 'local-deleted' })}
           />
-          {archives && archives.length && (
+          {archives && archives.length > 0 && (
             <ListItem nested>
               <ListSubheaderToggle
                 open={sectionOpen('archives')}
@@ -104,14 +104,31 @@ export default function RunSourcePanel() {
                     <SourceListItem
                       key={`${a.id}-${i}`}
                       label={a.label || a.id}
-                      help={`Local Archive: ${a.description}`}
+                      help={
+                        a.description ? (
+                          <>
+                            Local archive
+                            <span
+                              style={{
+                                marginLeft: '1em',
+                                color: 'var(--joy-palette-text-secondary)',
+                                fontStyle: 'italic'
+                              }}
+                            >
+                              {a.description}
+                            </span>
+                          </>
+                        ) : (
+                          'Local archive'
+                        )
+                      }
                       icon={<Inventory2 />}
                       selected={
                         source.type === 'local-archive' &&
                         (source as LocalArchiveRuns).archive.id === a.id
                       }
                       onClick={() => {
-                        setSource({type: 'local-archive', archive: a});
+                        setSource({ type: 'local-archive', archive: a });
                       }}
                     />
                   ))}

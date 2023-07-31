@@ -1,14 +1,6 @@
 import React from 'react';
 
-import {
-  Card,
-  Divider,
-  Grid,
-  Stack,
-  Tab,
-  Tabs,
-  Typography
-} from '@mui/joy';
+import { Card, Divider, Grid, Stack, Typography } from '@mui/joy';
 
 import { Fullscreen, FullscreenExit } from '@mui/icons-material';
 
@@ -17,7 +9,7 @@ import KeyDownBoundary from './components/KeyDownBoundary';
 import Labeled from './components/Labeled';
 import Toolbar, { ToolbarSpacer } from './components/Toolbar';
 import ToolbarButton from './components/ToolbarButton';
-import { ViewTabList } from './components/ViewTabs';
+import { ViewTab, ViewTabList, ViewTabs } from './components/ViewTabs';
 
 import LogScale from './icons/LogScale';
 
@@ -41,9 +33,7 @@ import { defaultSummariesView } from './prefs';
 import { useMainView } from './mainView';
 
 import { Run } from './types';
-
-const tabSx = { flexGrow: 0, scrollMargin: '8px' };
-const tabBlur: React.MouseEventHandler = e => (e.target as HTMLElement).blur();
+import { clearActiveFocus } from './utils';
 
 function Config() {
   return (
@@ -62,27 +52,14 @@ type SummariesTabsProps = {
 
 function SummariesTabs({ view, onChange }: SummariesTabsProps) {
   return (
-    <Tabs
-      selectionFollowsFocus
-      value={view}
-      onChange={(e, val) => onChange(val as string)}
-      sx={{ backgroundColor: 'unset', flexGrow: 1, overflow: 'hidden' }}
-    >
+    <ViewTabs value={view} onChange={onChange}>
       <ViewTabList>
-        <Tab value="visualizations" sx={tabSx} onClick={tabBlur}>
-          Visualizations
-        </Tab>
-        <Tab value="scalars" sx={tabSx} onClick={tabBlur}>
-          Scalars
-        </Tab>
-        <Tab value="images" sx={tabSx} onClick={tabBlur}>
-          Images
-        </Tab>
-        <Tab value="text" sx={tabSx} onClick={tabBlur}>
-          Text
-        </Tab>
+        <ViewTab value="visualizations">Visualizations</ViewTab>
+        <ViewTab value="scalars">Scalars</ViewTab>
+        <ViewTab value="images">Images</ViewTab>
+        <ViewTab value="text">Text</ViewTab>
       </ViewTabList>
-    </Tabs>
+    </ViewTabs>
   );
 }
 
@@ -90,11 +67,11 @@ function Visualizations() {
   return (
     <Stack gap={2} p={1}>
       <Card variant="outlined">
-        <Typography level="h5">Parallel Coordinates Plot</Typography>
+        <Typography fontSize="md">Parallel Coordinates Plot</Typography>
         <ParallelCoordinates />
       </Card>
       <Card variant="outlined">
-        <Typography level="h5">Scatter Plot</Typography>
+        <Typography fontSize="md">Scatter Plot</Typography>
         <ScatterPlot />
       </Card>
     </Stack>
@@ -105,15 +82,20 @@ type ScalarGridProps = {
   scalar: string;
 };
 
-function ScalarGrid({ scalar }: ScalarGridProps) {
+function ScalarCard({ scalar }: ScalarGridProps) {
   const [log, setLog] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
 
   return (
     <Grid md={12} lg={expanded ? 12 : 6} p={0.5}>
       <Card variant="outlined" sx={{ gap: 0, pb: 1 }}>
-        <Typography level="h6">{scalar}</Typography>
-        <ScalarPlot scalar={scalar} logScale={log} sx={{ width: '100%' }} />
+        <Typography fontSize="md">{scalar}</Typography>
+        <ScalarPlot
+          scalar={scalar}
+          logScale={log}
+          height={expanded ? 320 : 240}
+          sx={{ width: '100%' }}
+        />
         <Toolbar>
           <ToolbarButton
             tooltip="Use logarithmic scale"
@@ -125,7 +107,10 @@ function ScalarGrid({ scalar }: ScalarGridProps) {
           <ToolbarButton
             tooltip={expanded ? 'Shrink plot' : 'Expand plot'}
             icon={expanded ? <FullscreenExit /> : <Fullscreen />}
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => {
+              clearActiveFocus(); // Hide tooltip (resize can leave it shown)
+              setExpanded(!expanded);
+            }}
           />
         </Toolbar>
       </Card>
@@ -138,7 +123,7 @@ function Scalars() {
   return (
     <Grid container p={0.5}>
       {scalars.map(scalar => (
-        <ScalarGrid key={scalar} scalar={scalar} />
+        <ScalarCard key={scalar} scalar={scalar} />
       ))}
     </Grid>
   );
@@ -181,10 +166,6 @@ function Images() {
   );
 }
 
-function Text() {
-  return <>TODO: text</>;
-}
-
 export default function SummariesView() {
   const [view, setView] = React.useState<string>(defaultSummariesView);
 
@@ -197,7 +178,7 @@ export default function SummariesView() {
         <Stack
           sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, right: 0 }}
         >
-          <KeyDownBoundary navOnly>
+          <KeyDownBoundary>
             <SummariesTabs view={view} onChange={setView} />
           </KeyDownBoundary>
           <Divider />
@@ -210,9 +191,6 @@ export default function SummariesView() {
             </Conditional>
             <Conditional active={view === 'images'}>
               <Images />
-            </Conditional>
-            <Conditional active={view === 'text'}>
-              <Text />
             </Conditional>
           </div>
         </Stack>

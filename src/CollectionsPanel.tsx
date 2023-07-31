@@ -16,7 +16,9 @@ import ListSubheaderToggle from './components/ListSubheaderToggle';
 import Panel from './components/Panel';
 import Tooltip from './components/Tooltip';
 
-import { useCollection, useCollections } from './runs';
+import { useCollections } from './collections';
+import { useCollection } from './runs';
+
 import { ToggleState, useRefreshListener, useToggleState } from './utils';
 
 import { Collection } from './types';

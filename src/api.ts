@@ -9,6 +9,7 @@ import {
   Collection,
   FileDiff,
   Run,
+  RunAttributes,
   RunComment,
   RunFile,
   RunFlags,
@@ -70,6 +71,10 @@ const api = createApi({
 
     runScalars: builder.query<RunScalars, string>({
       query: runId => `runs/${runId}/scalars`
+    }),
+
+    runAttributes: builder.query<RunAttributes, string>({
+      query: runId => `runs/${runId}/attributes`
     }),
 
     runFiles: builder.query<RunFile[], string>({
@@ -154,6 +159,7 @@ export const runProcessInfoApi = api.endpoints.runProcessInfo;
 export const operationsApi = api.endpoints.operations;
 export const runsCompareApi = api.endpoints.runsCompare;
 export const runsScalarsApi = api.endpoints.runsScalars;
+export const runAttributesApi = api.endpoints.runAttributes;
 export const setRunLabelApi = api.endpoints.setRunLabel;
 export const setRunTagsApi = api.endpoints.setRunTags;
 export const collectionsApi = api.endpoints.collections;

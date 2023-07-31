@@ -23,7 +23,6 @@
     "@types/react-dom": "^18.2.6",
     "@types/react-syntax-highlighter": "^15.5.7",
     "d3": "^7.8.5",
-    "echarts": "^5.4.2",
     "filesize": "^10.0.7",
     "numeral": "^2.0.6",
     "path-browserify": "^1.0.1",

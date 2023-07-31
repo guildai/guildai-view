@@ -36,6 +36,7 @@ import {
   formatRunDuration,
   formatScalar,
   isRunId,
+  runsCompareAttributeNames,
   runsCompareFlagNames,
   runsCompareScalarNames
 } from './utils';
@@ -213,7 +214,12 @@ function defaultColDesc(col: Col) {
 }
 
 function tableColumns(compare: RunsCompare | undefined): Col[] {
-  return [...coreColumns(), ...flagColumns(compare), ...scalarColumns(compare)];
+  return [
+    ...coreColumns(),
+    ...flagColumns(compare),
+    ...attributeColumns(compare),
+    ...scalarColumns(compare)
+  ];
 }
 
 function coreColumns(): Col[] {
@@ -283,6 +289,21 @@ function formatFlag(val: any) {
   ) : (
     formatFlagValue(val)
   );
+}
+
+function attributeColumns(compare: RunsCompare | undefined): Col[] {
+  if (!compare) {
+    return [];
+  }
+  return runsCompareAttributeNames(compare)
+    .sort()
+    .map(name => ({
+      label: name,
+      cell: (run, compare) => (compare ? compare.attributes[name] || '' : ''),
+      sortType: 'attr',
+      sortName: name,
+      key: `attribute:${name}`
+    }));
 }
 
 function scalarColumns(compare: RunsCompare | undefined): Col[] {

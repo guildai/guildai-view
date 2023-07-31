@@ -15,12 +15,11 @@ import {
 import { SxProps } from '@mui/joy/styles/types';
 
 import {
+  Abc,
   DataObject,
   FlagOutlined,
-  Input,
   KeyboardArrowDownRounded,
   KeyboardArrowRightRounded,
-  Output,
   ReadMore,
   TextSnippetOutlined,
   UnfoldLess,
@@ -54,6 +53,7 @@ import { useCompare } from './selection';
 
 import {
   runStatusLabel,
+  useRunAttributes,
   useRunFileDiff,
   useRunFiles,
   useRunFlags,
@@ -67,6 +67,7 @@ import {
 import {
   assert,
   cmpNat,
+  formatAttribute,
   formatFlagValue,
   formatRunDate,
   formatRunDuration,
@@ -75,7 +76,15 @@ import {
   useRefreshListener
 } from './utils';
 
-import { ReactState, Refresh, Run, RunFile } from './types';
+import {
+  ReactState,
+  Refresh,
+  Run,
+  RunAttributes,
+  RunFile,
+  RunFlags,
+  RunScalars
+} from './types';
 
 import { apiBaseUrl } from './prefs';
 
@@ -87,10 +96,12 @@ type FileCompareProps = {
   rhsSkipPath?: boolean;
 };
 
-type RowProps = {
+type ValueType = string | number | null;
+
+type DiffableRowProps = {
   label?: string;
-  lhs: React.ReactNode;
-  rhs: React.ReactNode;
+  lhs: ValueType;
+  rhs: ValueType;
   diff?: boolean;
   format?: (arg0: any) => string;
 };
@@ -128,15 +139,43 @@ function ValueCell({
   );
 }
 
-function Row({ label, lhs, rhs, diff, format: formatProp }: RowProps) {
-  const [, , state] = React.useContext(CompareRunsContext);
+function DiffableRow({
+  label,
+  lhs,
+  rhs,
+  diff,
+  format: formatProp
+}: DiffableRowProps) {
+  const [hideUnchanged] = useHideUnchangedState();
 
-  if (state.hideUnchanged && lhs === rhs) {
+  if (hideUnchanged && lhs === rhs) {
     return <></>;
   }
 
   const format = formatProp || (x => x);
 
+  return (
+    <Row
+      label={label}
+      lhs={<ValueCell val={lhs} format={format} />}
+      rhs={
+        diff ? (
+          <Diff lhs={lhs} rhs={rhs} format={format} />
+        ) : (
+          <ValueCell val={rhs} format={format} />
+        )
+      }
+    />
+  );
+}
+
+type RowProps = {
+  label?: string;
+  lhs: React.ReactElement;
+  rhs: React.ReactElement;
+};
+
+function Row({ label, lhs, rhs }: RowProps) {
   return (
     <tr>
       <td>
@@ -151,16 +190,8 @@ function Row({ label, lhs, rhs, diff, format: formatProp }: RowProps) {
           </Typography>
         </Tooltip>
       </td>
-      <td>
-        <ValueCell val={lhs} format={format} />
-      </td>
-      <td>
-        {diff ? (
-          <Diff lhs={lhs} rhs={rhs} format={format} />
-        ) : (
-          <ValueCell val={rhs} format={format} />
-        )}
-      </td>
+      <td>{lhs}</td>
+      <td>{rhs}</td>
     </tr>
   );
 }
@@ -241,69 +272,94 @@ function TextDiff({ lhs, rhs }: TextDiffProps) {
 
 function Metadata() {
   const [lhs, rhs] = useCompareRuns();
-  const [lhsTags, refreshLhsTags] = useRunTags(lhs);
-  const [rhsTags, refreshRhsTags] = useRunTags(rhs);
-
-  useRefreshListener(refreshLhsTags);
-  useRefreshListener(refreshRhsTags);
+  const [lhsTags, rhsTags] = useCompareData<string[]>(useRunTags);
+  const [hideUnchanged] = useHideUnchangedState();
 
   return (
     <SectionPanel name="metadata" title="Metadata">
       <CompareTable border sx={{ mt: 1 }}>
-        <Row label="Operation" lhs={lhs.operation} rhs={rhs.operation} />
-        <Row label="Status" lhs={lhs.status} rhs={rhs.status} />
-        <Row
+        <DiffableRow label="ID" lhs={lhs.id} rhs={rhs.id} />
+        <DiffableRow
+          label="Operation"
+          lhs={lhs.operation}
+          rhs={rhs.operation}
+          diff={true}
+        />
+        <DiffableRow
+          label="Status"
+          lhs={lhs.status}
+          rhs={rhs.status}
+          diff={true}
+        />
+        <DiffableRow
           label="Started"
           lhs={formatRunDate(lhs.started)}
           rhs={formatRunDate(rhs.started)}
         />
-        <Row
+        <DiffableRow
           label="Stopped"
           lhs={formatRunDate(lhs.stopped)}
           rhs={formatRunDate(rhs.stopped)}
         />
-        <Row
+        <DiffableRow
           label="Duration"
           lhs={formatRunDuration(lhs.started, lhs.stopped)}
           rhs={formatRunDuration(rhs.started, rhs.stopped)}
         />
-        <Row label="ID" lhs={lhs.id} rhs={rhs.id} />
-        <Row
+        <DiffableRow
           label="Source Code"
           lhs={lhs.sourceCodeDigest}
           rhs={rhs.sourceCodeDigest}
+          diff={true}
         />
-        <Row label="Label" lhs={lhs.label} rhs={rhs.label} />
-        <Row
-          label="Tags"
-          lhs={<TagList tags={lhsTags || []} editable={false} />}
-          rhs={<TagList tags={rhsTags || []} editable={false} />}
+        <DiffableRow
+          label="Label"
+          lhs={lhs.label}
+          rhs={rhs.label}
+          diff={true}
         />
+        {hideUnchanged && cmpTags(lhsTags, rhsTags) ? (
+          <></>
+        ) : (
+          <Row
+            label="Tags"
+            lhs={<TagList tags={lhsTags || []} editable={false} />}
+            rhs={<TagList tags={rhsTags || []} editable={false} />}
+          />
+        )}
       </CompareTable>
     </SectionPanel>
   );
 }
 
-function Flags() {
-  const [lhs, rhs] = React.useContext(CompareRunsContext);
+function cmpTags(lhs: string[] | undefined, rhs: string[] | undefined) {
+  return JSON.stringify(lhs) === JSON.stringify(rhs);
+}
 
-  const lhsFlags = useRunFlags(lhs) || {};
-  const rhsFlags = useRunFlags(rhs) || {};
+function Flags() {
+  const [lhsFlags, rhsFlags] = useCompareData<RunFlags>(useRunFlags, {});
+
+  const [hideUnchanged] = useHideUnchangedState();
+
   const names = Object.keys({ ...lhsFlags, ...rhsFlags }).sort(cmpNat);
   const diffCount = names.reduce(
     (acc, name) => (lhsFlags[name] !== rhsFlags[name] ? acc + 1 : acc),
     0
   );
 
+  if (hideUnchanged && diffCount === 0) {
+    return <></>;
+  }
+
   return (
     <SectionPanel
       name="flags"
       title="Flags"
-      details={names.length ? `(${diffCount}/${names.length} differ)` : '(0)'}
+      details={names.length ? `(${diffCount}/${names.length} changed)` : '(0)'}
     >
       <CompareTable border sx={{ mt: 1 }}>
         {names.map(name => (
-          <Row
+          <DiffableRow
             key={name}
             label={name}
             lhs={lhsFlags[name]}
@@ -318,10 +374,11 @@ function Flags() {
 }
 
 function Scalars() {
-  const [lhs, rhs] = React.useContext(CompareRunsContext);
-
-  const lhsScalars = useRunScalars(lhs)[0] || {};
-  const rhsScalars = useRunScalars(rhs)[0] || {};
+  const [lhsScalars, rhsScalars] = useCompareData<RunScalars>(
+    useRunScalars,
+    {}
+  );
+  const [hideUnchanged] = useHideUnchangedState();
 
   const tags = Object.keys({ ...lhsScalars, ...rhsScalars }).sort(cmpNat);
   const diffCount = tags.reduce(
@@ -329,6 +386,10 @@ function Scalars() {
       lhsScalars[tag]?.lastVal !== rhsScalars[tag]?.lastVal ? acc + 1 : acc,
     0
   );
+
+  if (hideUnchanged && diffCount === 0) {
+    return <></>;
+  }
 
   const formatScalarOrMissing = (val: number | undefined): string => {
     return val !== undefined ? formatScalar(val) : '';
@@ -338,17 +399,61 @@ function Scalars() {
     <SectionPanel
       name="scalars"
       title="Scalars"
-      details={tags.length > 0 ? `(${diffCount}/${tags.length} differ)` : '(0)'}
+      details={
+        tags.length > 0 ? `(${diffCount}/${tags.length} changed)` : '(0)'
+      }
     >
       <CompareTable border sx={{ mt: 1 }}>
         {tags.map(tag => (
-          <Row
+          <DiffableRow
             key={tag}
             label={tag}
             lhs={lhsScalars[tag]?.lastVal}
             rhs={rhsScalars[tag]?.lastVal}
             diff={true}
             format={formatScalarOrMissing}
+          />
+        ))}
+      </CompareTable>
+    </SectionPanel>
+  );
+}
+
+function Attributes() {
+  const [lhsAttributes, rhsAttributes] = useCompareData<RunAttributes>(
+    useRunAttributes,
+    {}
+  );
+  const [hideUnchanged] = useHideUnchangedState();
+
+  const names = Object.keys({ ...lhsAttributes, ...rhsAttributes }).sort(
+    cmpNat
+  );
+  const diffCount = names.reduce(
+    (acc, name) =>
+      lhsAttributes[name] !== rhsAttributes[name] ? acc + 1 : acc,
+    0
+  );
+
+  if (hideUnchanged && diffCount === 0) {
+    return <></>;
+  }
+
+  return (
+    <SectionPanel
+      name="attributes"
+      title="Attributes"
+      details={names.length ? `(${diffCount}/${names.length} changed)` : '(0)'}
+    >
+      <CompareTable border sx={{ mt: 1 }}>
+        {names.map(name => (
+          <DiffableRow
+            key={name}
+            label={name}
+            lhs={lhsAttributes[name]}
+            rhs={rhsAttributes[name]}
+            diff={true}
+            format={formatAttribute}
           />
         ))}
       </CompareTable>
@@ -694,17 +799,13 @@ function CompareHeader() {
 
 function CompareToolbar() {
   const [lhs, rhs] = useMaybeCompareRuns();
-
   const [hideUnchanged, toggleHideUnchanged] = useHideUnchangedState();
-
   const [sections, toggleSection] = useSections();
-
-  const disabled = !lhs || !rhs;
-
+  const [clearable, clear] = useClearState();
   const [anySectionsExpanded, toggleExpandCollapseAll] =
     useExpandCollapseAllState();
 
-  const [clearable, clear] = useClearState();
+  const disabled = !lhs || !rhs;
 
   return (
     <Stack
@@ -736,6 +837,11 @@ function CompareToolbar() {
               icon: <OneTwoThree />
             },
             {
+              value: 'attributes',
+              tooltip: 'Attributes',
+              icon: <Abc />
+            },
+            {
               value: 'sourceCode',
               tooltip: 'Source Code',
               icon: <DataObject />
@@ -759,29 +865,6 @@ function CompareToolbar() {
         />
       </Labeled>
 
-      {/* <Divider orientation="vertical" sx={{ my: 0.25 }} /> */}
-
-      <Labeled label="Type" tooltip="Show/hide file type" disabled={disabled}>
-        <ToggleList
-          // selected={[]}
-          tooltipPlacement="bottom-start"
-          // onChange={e => toggleSection(e.target.value as SectionName)}
-          disabled={disabled}
-          items={[
-            {
-              value: 'd',
-              tooltip: 'Dependencies',
-              icon: <Input />
-            },
-            {
-              value: 'g',
-              tooltip: 'Generated',
-              icon: <Output />
-            }
-          ]}
-        />
-      </Labeled>
-
       <Tooltip title="Clear all filters">
         <Button
           color="neutral"
@@ -794,8 +877,6 @@ function CompareToolbar() {
           Clear
         </Button>
       </Tooltip>
-
-      {/* <Divider orientation="vertical" sx={{ my: 0.25 }} /> */}
 
       <Checkbox
         checked={hideUnchanged}
@@ -843,6 +924,7 @@ type SectionName =
   | 'metadata'
   | 'flags'
   | 'scalars'
+  | 'attributes'
   | 'sourceCode'
   | 'textFiles'
   | 'images'
@@ -852,6 +934,7 @@ const allSections: SectionName[] = [
   'metadata',
   'flags',
   'scalars',
+  'attributes',
   'sourceCode',
   'textFiles',
   'images',
@@ -862,7 +945,7 @@ function initStateValue(): CompareViewState {
   return {
     sections: new Set([]),
     hideUnchanged: false,
-    expanded: new Set(['metadata', 'flags'])
+    expanded: new Set(['metadata', 'flags', 'scalars', 'attributes'])
   };
 }
 
@@ -889,6 +972,24 @@ function useCompareRuns(): [Run, Run] {
 function useMaybeCompareRuns(): [Run | undefined, Run | undefined] {
   const [lhs, rhs] = React.useContext(CompareRunsContext);
   return [lhs, rhs];
+}
+
+function useCompareData<T>(
+  f: (argo: Run) => [T | undefined, Refresh],
+  defaultData?: any
+) {
+  const [lhs, rhs] = useCompareRuns();
+
+  const [lhsData0, lhsRefresh] = f(lhs);
+  const [rhsData0, rhsRefresh] = f(rhs);
+
+  const lhsData = lhsData0 || defaultData;
+  const rhsData = rhsData0 || defaultData;
+
+  useRefreshListener(lhsRefresh);
+  useRefreshListener(rhsRefresh);
+
+  return [lhsData, rhsData];
 }
 
 function useCompareViewState(): ReactState<CompareViewState> {
@@ -981,7 +1082,6 @@ function useClearState(): [boolean, () => void] {
 export default function CompareView() {
   const [selected, current] = useSelectedRuns();
   const compare = useCompareRun(selected);
-
   const [state, setState] = React.useState<CompareViewState>(initStateValue());
 
   return (
@@ -1002,6 +1102,9 @@ export default function CompareView() {
             </Conditional>
             <Conditional active={sectionActive(state, 'scalars')}>
               <Scalars />
+            </Conditional>
+            <Conditional active={sectionActive(state, 'attributes')}>
+              <Attributes />
             </Conditional>
             <Conditional active={sectionActive(state, 'sourceCode')}>
               <SourceCode />

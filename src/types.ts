@@ -33,6 +33,8 @@ export type RunScalar = {
 
 export type RunScalars = { [tag: string]: RunScalar };
 
+export type RunAttributes = { [key: string]: any };
+
 export type ManifestType =
   | 's' // source code
   | 'd' // dependency
@@ -80,6 +82,7 @@ export type RunProcessInfo = {
 export type RunCompareData = {
   flags: RunFlags;
   scalars: RunScalars;
+  attributes: RunAttributes;
 };
 
 export type RunsCompare = {
